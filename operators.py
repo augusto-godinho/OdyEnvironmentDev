@@ -4,9 +4,11 @@ from pickle import TRUE
 import bpy
 import json
 import os
+import numpy
 from pathlib import Path
 from mathutils import Vector, Color
 from .functions import unreal
+import bmesh
 
 from bpy.types import (
     Operator,
@@ -42,29 +44,20 @@ from bpy.types import (
     ShaderNodeTree,
 )
 
-ody_nodes = [
-                'Character Full',
-                'Character Main',
-                'Character Face',
-                'Character Transparent',
-                'Character Glass',
-                'Character Hair'
+ody_env_nodes = [
+                'Environment Main Surface',
+                'Environment Decals',
+                'Environment Stamp Map',
+                'Environment Foliage',
+                'Environment Background',
 ]
 
-ody_nodes_all = [
-                'Character Full',
-                'Character Main',
-                'Character Face',
-                'Character Transparent',
-                'Character Glass',
-                'Character Hair',
-                'Face Shadows',
-                'Outline',
-                'Hair',
-                'Light Direction',
-                'Main Shadow',
-                'Rim Light',
-                'Speculars'
+ody_nodes_env_all = [
+                'Environment Main Surface',
+                'Environment Decals',
+                'Environment Stamp Map',
+                'Environment Foliage',
+                'Environment Background'
 ]
 
 ody_materials = {
@@ -95,7 +88,18 @@ def value_from_socket(socket):
         return f"{[socket.default_value[i] for i in range(4)]}"
     else:
         return socket.default_value.__str__()
-    
+
+def s2lin(x):
+    a = 0.055
+    return numpy.where(x <= 0.04045,
+                 x * (1.0 / 12.92),
+                 pow((x + a) * (1.0 / (1 + a)), 2.4))
+
+def lin2s(x):
+    a = 0.055
+    return numpy.where(x <= 0.0031308,
+                 x * 12.92,
+                 (1 + a) * pow(x, 1 / 2.4) - a) 
 
 #Object
 class ODYLOOKDEV_OT_export_materials(bpy.types.Operator):
@@ -226,8 +230,8 @@ class ODYLOOKDEV_OT_export_materials(bpy.types.Operator):
         unreal.export_materials(materials_data)
         return {'FINISHED'}
 
-class ODYLOOKDEV_OT_clean_duplicated_nodes(bpy.types.Operator):
-    bl_idname = "odylookdev.clean_duplicated_nodes"
+class ODYENVDEV_OT_clean_duplicated_nodes(bpy.types.Operator):
+    bl_idname = "odyenvironmentdev.clean_duplicated_nodes"
     bl_label = "Update Materials"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -236,12 +240,12 @@ class ODYLOOKDEV_OT_clean_duplicated_nodes(bpy.types.Operator):
         node_groups = bpy.data.node_groups
 
 
-        dirpath = node_search_path(context)
-        filepath = os.path.join(dirpath, "Character_Material_Base.blend")
+        dirpath = env_node_search_path(context)
+        filepath = os.path.join(dirpath, "Environment_Base.blend")
         nodes_to_link = []
         with bpy.data.libraries.load(filepath, link=True) as (data_from, data_to):
             for group_name in data_from.node_groups:
-                if group_name in ody_nodes_all:
+                if group_name in ody_nodes_env_all:
                     nodes_to_link.append({'name': group_name})
 
         filepath = os.path.join(dirpath, "Character_Material_Base.blend/NodeTree/")
@@ -250,7 +254,7 @@ class ODYLOOKDEV_OT_clean_duplicated_nodes(bpy.types.Operator):
 
         for node in bpy.data.node_groups:
             if node.library == None:
-                if (node.name.split('.')[0] in ody_nodes_all):
+                if (node.name.split('.')[0] in ody_nodes_env_all):
                     node.name =node.name.split('.')[0]+".replace"
         
         for material in bpy.data.materials:
@@ -258,12 +262,12 @@ class ODYLOOKDEV_OT_clean_duplicated_nodes(bpy.types.Operator):
                 for node in material.node_tree.nodes:
                     if node.type == 'GROUP':
                         if node.node_tree != None:
-                            if node.node_tree.name.split('.')[0] in ody_nodes_all:
+                            if node.node_tree.name.split('.')[0] in ody_nodes_env_all:
                                 node.node_tree = bpy.data.node_groups.get(node.node_tree.name.split('.')[0])
         
         for node in bpy.data.node_groups:
             if node.library == None:
-                if (node.name.split('.')[0] in ody_nodes_all):
+                if (node.name.split('.')[0] in ody_nodes_env_all):
                     bpy.data.node_groups.remove(node)
 
         return {'FINISHED'}
@@ -276,7 +280,7 @@ class ODYLOOKDEV_OT_add_outline(bpy.types.Operator):
     def execute(self, context):
 
         bpy.ops.view3d.snap_cursor_to_center()
-        dirpath = node_search_path(context)
+        dirpath = env_node_search_path(context)
         filepath = os.path.join(dirpath, "Character_Material_Base.blend")
         nodes_to_link = [{"name":"Outline"}]
 
@@ -398,45 +402,32 @@ def node_template_add(context, filepath, node_group, ungroup, report):
 # -----------------------------------------------------------------------------
 # Node Template Prefs
 
-def node_search_path(context):
+def env_node_search_path(context):
     preferences = context.preferences
-    addon_prefs = preferences.addons["OdyLookDev"].preferences
-    dirpath = addon_prefs.search_path
+    addon_prefs = preferences.addons["OdyEnvironmentDev"].preferences
+    dirpath = addon_prefs.env_search_path
     return dirpath
 
 
-class NodeTemplatePrefs(AddonPreferences):
-    bl_idname = __name__
-
-    search_path: StringProperty(
-        name="Directory of blend files with node-groups",
-        subtype='DIR_PATH',
-    )
-
-    def draw(self, context):
-        layout = self.layout
-        layout.prop(self, "search_path")
-
-
-class NODE_OT_template_add(Operator):
+class NODE_OT_env_template_add(Operator):
     """Add a node template"""
-    bl_idname = "node.template_add"
+    bl_idname = "node.env_template_add"
     bl_label = "Add node group template"
     bl_description = "Add node group template"
     bl_options = {'REGISTER', 'UNDO'}
 
-    filepath: StringProperty(
+    filepathenv: StringProperty(
         subtype='FILE_PATH',
     )
-    group_name: StringProperty()
+    env_group_name: StringProperty()
 
     def execute(self, context):
-        node_template_add(context, self.filepath, self.group_name, True, self.report)
+        node_template_add(context, self.filepathenv, self.env_group_name, True, self.report)
 
         return {'FINISHED'}
 
     def invoke(self, context, event):
-        node_template_add(context, self.filepath, self.group_name, event.shift, self.report)
+        node_template_add(context, self.filepathenv, self.env_group_name, event.shift, self.report)
 
         return {'FINISHED'}
 
@@ -444,64 +435,66 @@ class NODE_OT_template_add(Operator):
 # -----------------------------------------------------------------------------
 # Node menu list
 
-def node_template_cache(context, *, reload=False):
-    dirpath = node_search_path(context)
+def env_node_template_cache(context, *, reload=False):
+    dirpath = env_node_search_path(context)
 
-    if node_template_cache._node_cache_path != dirpath:
+    if env_node_template_cache._node_cache_path != dirpath:
         reload = True
 
-    node_cache = node_template_cache._node_cache
+    node_cache = env_node_template_cache._node_cache
     if reload:
         node_cache = []
     if node_cache:
         return node_cache
 
-    filepath = os.path.join(dirpath, "Character_Material_Base.blend")
+    filepath = os.path.join(dirpath, "Environment_Base.blend")
     with bpy.data.libraries.load(filepath, link=True) as (data_from, data_to):
         for group_name in data_from.node_groups:
-            if not group_name.startswith("_"):
-                node_cache.append((filepath, group_name))
+            print(group_name)
+            if (group_name in ody_env_nodes):
+                if not group_name.startswith("_"):
+                    node_cache.append((filepath, group_name))
 
-    node_template_cache._node_cache = node_cache
-    node_template_cache._node_cache_path = dirpath
+    env_node_template_cache._node_cache = node_cache
+    env_node_template_cache._node_cache_path = dirpath
 
     return node_cache
 
 
-node_template_cache._node_cache = []
-node_template_cache._node_cache_path = ""
+env_node_template_cache._node_cache = []
+env_node_template_cache._node_cache_path = ""
 
 
-class NODE_MT_template_add(Menu):
-    bl_label = "Node Template"
+class NODE_MT_env_template_add(Menu):
+    bl_label = "Env Node Template"
 
     def draw(self, context):
         layout = self.layout
 
-        dirpath = node_search_path(context)
+        dirpath = env_node_search_path(context)
         if dirpath == "":
             layout.label(text="Set search dir in the addon-prefs")
             return
 
         try:
-            node_items = node_template_cache(context)
+            node_items = env_node_template_cache(context)
         except Exception as ex:
             node_items = ()
             layout.label(text=repr(ex), icon='ERROR')
 
         for filepath, group_name in node_items:
             props = layout.operator(
-                NODE_OT_template_add.bl_idname,
+                NODE_OT_env_template_add.bl_idname,
                 text=group_name,
             )
-            props.filepath = filepath
-            props.group_name = group_name
+            props.filepathenv = filepath
+            props.env_group_name = group_name
 
 
-def add_node_button(self, context):
+def add_env_node_button(self, context):
     self.layout.menu(
-        NODE_MT_template_add.__name__,
-        text="Ody Shaders",
+        NODE_MT_env_template_add.__name__,
+        text="Ody Environment Shaders",
         icon='PLUGIN',
     )
 
@@ -567,19 +560,6 @@ def Recolor(flow):
                 i+=1
         
         o_id += 1
-
-
-class ODYLOOKDEV_OT_set_vertex_alpha(bpy.types.Operator):
-    bl_label = "Vertex"
-    bl_idname = "odylookdev.vertex_aplha"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    flow : bpy.props.StringProperty(default="NEUTRAL")
-    
-    def execute(self, context):
-        print("Flow = "+ self.flow)
-        Recolor(self.flow)
-        return {'FINISHED'}
 
 
 #---------Export Outline----------->
@@ -769,10 +749,37 @@ def ExportMain():
 
     bpy.ops.object.delete()
 
-def MarkVertex():
+class ODYENVDEV_OT_set_vertex_code(bpy.types.Operator):
+    bl_label = "Vertex"
+    bl_idname = "odyenvironmentdev.set_vertex_code"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    flow : bpy.props.StringProperty(default='0.25;r')
+    
+    def execute(self, context):
+
+        scene = context.scene
+        odyenvdev = scene.odyenvdev
+
+        print("Flow = "+ self.flow)
+        if(odyenvdev.set_vertex_code_face):
+            MarkFace(self.flow)
+        else:
+            MarkVertex(self.flow)
+        return {'FINISHED'}
+        
+def MarkVertex(flow):
     D =  bpy.data
     C =  bpy.context
     S =  bpy.context.scene
+
+    f = flow.split(';')
+
+    value = float(f[0])
+    channel = f[1]
+
+    print(value)
+    print(channel)
 
     objects = bpy.context.selected_objects
     o_id=0
@@ -783,16 +790,6 @@ def MarkVertex():
                     bpy.ops.object.editmode_toggle()
 
                 mesh = obj.data
-                
-                vcolor_names = []
-                for vcolor in mesh.vertex_colors:
-                    vcolor_names.append(vcolor.name)
-                
-                for vname in vcolor_names:
-                    mesh.vertex_colors.remove(mesh.vertex_colors[vname])
-
-                if not mesh.vertex_colors:
-                    mesh.vertex_colors.new(name='Col', do_init=True)
 
                 if "Col" in mesh.vertex_colors:
                     color_layer = mesh.vertex_colors["Col"]
@@ -808,16 +805,494 @@ def MarkVertex():
                         col = color_layer.data[i].color
 
                         if mesh.vertices[id].select == True:
-                            pos = 1
-                            if mesh.vertices[id].co[0] <= 0:
-                                pos = 0
+                            if channel == 'r':
+                                color_layer.data[i].color = [value, col[1], col[2], col[3]]
+                                print(col[1])
                             
-                            color_layer.data[i].color = [pos,0,0,0]
+                            if channel == 'g':
+                                color_layer.data[i].color = [col[0], value, col[2], col[3]]
+                            
+                            if channel == 'b':
+                                color_layer.data[i].color = [col[0], col[1], value, col[3]]
+                            
+                            if channel == 'a':
+                                color_layer.data[i].color = [col[0], col[1], col[2], value]
+                        i+=1
+                
+                o_id += 1
+
+def MarkFace(flow):
+    D =  bpy.data
+    C =  bpy.context
+    S =  bpy.context.scene
+
+    f = flow.split(';')
+
+    value = float(f[0])
+    channel = f[1]
+
+    print(value)
+    print(channel)
+
+    objects = bpy.context.selected_objects
+    o_id=0
+    for obj in objects:
+        if obj.type == "MESH":
+            if True:
+                if obj.mode == 'EDIT':
+                    bpy.ops.object.editmode_toggle()
+
+                mesh = obj.data
+
+                if "Col" in mesh.vertex_colors:
+                    color_layer = mesh.vertex_colors["Col"]
+                else:
+                    color_layer = mesh.vertex_colors.new(name="Col")
+                
+                bpy.ops.geometry.color_attribute_render_set(name="Col")
+                
+                i=0
+                for poly in mesh.polygons:
+                    for idx in poly.loop_indices:
+                        id = mesh.loops[i].vertex_index
+                        col = color_layer.data[i].color
+
+                        if poly.select == True:
+                            if channel == 'r':
+                                color_layer.data[i].color = [value, col[1], col[2], col[3]]
+                                print(col[1])
+                            
+                            if channel == 'g':
+                                color_layer.data[i].color = [col[0], value, col[2], col[3]]
+                            
+                            if channel == 'b':
+                                color_layer.data[i].color = [col[0], col[1], value, col[3]]
+                            
+                            if channel == 'a':
+                                color_layer.data[i].color = [col[0], col[1], col[2], value]
                         i+=1
                 
                 o_id += 1
 
 
+#-----------Vertex Colors Dictionary------------------
+
+class ODYENVDEV_OT_assign_vertex_to_color_id(bpy.types.Operator):
+    bl_label = "Vertex to Color Id"
+    bl_idname = "odyenvironmentdev.assign_vertex_to_color_id"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    color_id : bpy.props.StringProperty(default="Base")
+    
+    def execute(self, context):
+        AssignVertexToColor(self.color_id)
+        return {'FINISHED'}
+
+def AssignVertexToColor(color_id):
+    scene =  bpy.context.scene
+    objects = bpy.context.selected_objects
+    vertexcolors = scene.OdyEnvDevVertexColorDic
+
+    o_id=0
+    for obj in objects:
+        if obj.mode == 'EDIT':
+            bpy.ops.object.editmode_toggle()
+
+        mesh = obj.data
+
+        if 'VertexColorDic' in mesh.attributes:
+            print('Has vertex color dictionay')
+        else:
+            mesh.attributes.new(name='VertexColorDic', type='STRING', domain='CORNER')
+        
+        color_ids = mesh.attributes['VertexColorDic']
+
+        if not mesh.vertex_colors:
+            mesh.vertex_colors.new()
+
+        if "Col" in mesh.vertex_colors:
+            color_layer = mesh.vertex_colors["Col"]
+        else:
+            color_layer = mesh.vertex_colors.new(name="Col")
+        
+        i=0
+        for poly in mesh.polygons:
+            for idx in poly.loop_indices:
+                id = mesh.loops[i].vertex_index
+                colid = color_ids.data[i].value
+                col = color_layer.data[i].color
+
+                if poly.select == True:
+                    color_ids.data[i].value = color_id
+                    if not color_id == 'FREE':
+                        color_layer.data[i].color = [vertexcolors[color_id].color_value[0],
+                                                    vertexcolors[color_id].color_value[1],
+                                                    vertexcolors[color_id].color_value[2],
+                                                    col[3]]
+                    
+                i+=1
+
+        
+        o_id += 1
+
+class ODYENVDEV_OT_add_new_color_id(bpy.types.Operator):
+    bl_label = "Rename Id"
+    bl_idname = "odyenvironmentdev.add_new_color_id"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    new_color_id : bpy.props.StringProperty(name='New Color Id', default="New Color Id")
+    
+    def execute(self, context):
+        scene =  bpy.context.scene
+        objects = scene.objects
+
+        vertexcolors = scene.OdyEnvDevVertexColorDic
+
+        if self.new_color_id not in vertexcolors:
+            vertexcolors.add().name = self.new_color_id
+        else:
+            print("The ID already exist")
+
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+class ODYENVDEV_OT_clear_all_color_ids(bpy.types.Operator):
+    bl_label = "Clear all color Ids?"
+    bl_idname = "odyenvironmentdev.clear_all_color_ids"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        scene =  bpy.context.scene
+        objects = scene.objects
+
+        vertexcolors = scene.OdyEnvDevVertexColorDic
+        vertexcolors.clear()
+
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+class ODYENVDEV_OT_rename_color_id(bpy.types.Operator):
+    bl_label = "Rename Id"
+    bl_idname = "odyenvironmentdev.rename_color_id"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    color_id : bpy.props.StringProperty(name='Color Id', default="Name")
+    new_color_id : bpy.props.StringProperty(name='New Color Id', default="New Name")
+    
+    def execute(self, context):
+        scene =  bpy.context.scene
+        objects = scene.objects
+
+        vertexcolors = scene.OdyEnvDevVertexColorDic
+
+        if self.new_color_id in vertexcolors:
+            vertexcolors.remove(vertexcolors.find(self.color_id))
+        else:
+            vertexcolors.add().name = self.new_color_id
+            vertexcolors[self.new_color_id].color_value = vertexcolors[self.color_id].color_value
+            vertexcolors.remove(vertexcolors.find(self.color_id))
+
+        o_id=0
+        for obj in objects:
+            if obj.mode == 'EDIT':
+                bpy.ops.object.editmode_toggle()
+
+            if obj.type == 'MESH':
+                mesh = obj.data
+                have_colors_dic = False
+
+                if 'VertexColorDic' in mesh.attributes:
+                    have_colors_dic = True
+                    color_ids = mesh.attributes['VertexColorDic']
+                        
+                if have_colors_dic:
+                    i=0
+                    for poly in mesh.polygons:
+                        for idx in poly.loop_indices:
+                            id = mesh.loops[i].vertex_index
+                            colid = color_ids.data[i].value
+
+                            if self.color_id == color_ids.data[i].value:
+                                color_ids.data[i].value = self.new_color_id
+                            i+=1
+                
+            o_id += 1
+
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+class ODYENVDEV_OT_update_color_ids(bpy.types.Operator):
+    bl_label = "Update Color IDs"
+    bl_idname = "odyenvironmentdev.update_color_ids"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    color_id : bpy.props.StringProperty(name='Color Id', default="Base")
+    
+    def execute(self, context):
+        updateColorIDs(self.color_id)
+        return {'FINISHED'}
+    
+def updateColorIDs(color_id):
+    scene =  bpy.context.scene
+    objects = scene.objects
+
+    vertexcolors = scene.OdyEnvDevVertexColorDic
+
+    if(color_id != 'UPDATE_ALL'):
+        assignNewColor(objects, color_id, vertexcolors)
+    else:
+        for c_id in vertexcolors:
+            assignNewColor(objects, c_id.name, vertexcolors)
+    
+def assignNewColor(objects, color_id, vertexcolors):
+    o_id=0
+    for obj in objects:
+        if obj.mode == 'EDIT':
+            bpy.ops.object.editmode_toggle()
+
+        if obj.type == 'MESH':
+            mesh = obj.data
+            have_colors_dic = False
+
+            if 'VertexColorDic' in mesh.attributes:
+                have_colors_dic = True
+                color_ids = mesh.attributes['VertexColorDic']
+            
+            if "Col" in mesh.vertex_colors:
+                color_layer = mesh.vertex_colors["Col"]
+            else:
+                color_layer = mesh.vertex_colors.new(name="Col")
+            
+            if have_colors_dic:
+                i=0
+                for poly in mesh.polygons:
+                    for idx in poly.loop_indices:
+                        id = mesh.loops[i].vertex_index
+                        colid = color_ids.data[i].value
+                        col = color_layer.data[i].color
+
+                        if color_id == color_ids.data[i].value:
+                            color_layer.data[i].color = [vertexcolors[color_id].color_value[0],
+                                                vertexcolors[color_id].color_value[1],
+                                                vertexcolors[color_id].color_value[2],
+                                                col[3]]
+                        i+=1
+        o_id += 1
+
+class ODYENVDEV_OT_color_id_from_stampmap_main(bpy.types.Operator):
+    bl_label = "Convert from main stampmap colors?"
+    bl_idname = "odyenvironmentdev.color_id_from_stampmap_main"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        scene =  bpy.context.scene
+        objects = bpy.context.selected_objects
+
+        vertexcolors = scene.OdyEnvDevVertexColorDic
+        vertexcolors.clear()
+
+        
+        main_dict = {
+            0.020 : 'Base',
+            0.125 : 'Secondary',
+            0.250 : 'Accent',
+            0.375 : 'Floor Base',
+            0.750 : 'Floor Accent',
+            0.500 : 'Team 1',
+            0.625 : 'Team 2',
+            0.875 : 'Secondary Accent 1',
+            1.000 : 'Secondary Accent 2',
+        }
+
+        for col_id in main_dict.values():
+            vertexcolors.add().name = col_id
+
+
+        o_id=0
+        for obj in objects:
+            if obj.mode == 'EDIT':
+                bpy.ops.object.editmode_toggle()
+
+            if obj.type == 'MESH':
+                mesh = obj.data
+                has_vertex_col = False
+
+                if 'VertexColorDic' in mesh.attributes:
+                    color_ids = mesh.attributes['VertexColorDic']
+                else:
+                    mesh.attributes.new(name='VertexColorDic', type='STRING', domain='CORNER')
+        
+                color_ids = mesh.attributes['VertexColorDic']
+
+                
+                if "Col" in mesh.vertex_colors:
+                    has_vertex_col = True
+                    color_layer = mesh.vertex_colors["Col"]
+                else:
+                    print(obj.name + ' has no "Col" attribute')
+                        
+                if has_vertex_col:
+                    i=0
+                    for poly in mesh.polygons:
+                        for idx in poly.loop_indices:
+                            id = mesh.loops[i].vertex_index
+                            col = color_layer.data[i].color
+                            print('Mesh='+str(len(color_layer.data)))
+                            colid = round(col[0],3)
+                            if colid in main_dict:
+                                color_ids.data[i].value = main_dict[colid]
+                            i+=1
+                
+            o_id += 1
+        
+        #Vertex Emi and Surface to UV
+        o_id=0
+        for obj in objects:
+            if obj.type == "MESH":
+                me = obj.data
+                
+                
+                uvs = len(mesh.uv_layers)
+
+                for i in range(5-uvs):
+                    if i >= 0:
+                        mesh.uv_layers.new()
+                
+                mesh.uv_layers[0].name = 'Main'
+                mesh.uv_layers[1].name = 'Lightmap'
+                mesh.uv_layers[2].name = 'Surface'
+                mesh.uv_layers[3].name = 'ES'
+                mesh.uv_layers[4].name = 'Pivot'
+
+                if "Col" in mesh.vertex_colors:
+                    mesh.vertex_colors["Col"].active=True
+                else:
+                    print(obj.name + ' has no "Col" attribute')
+                
+                bpy.ops.object.mode_set(mode='EDIT')
+                
+                bm = bmesh.from_edit_mesh(me)
+                if "ES" in me.uv_layers:
+                    me.uv_layers['ES'].active=True
+                    uv_layer = bm.loops.layers.uv.verify()
+                    color_layer = bm.loops.layers.color.verify()
+
+                    print(color_layer)
+
+                    i=0
+                    for face in bm.faces:
+                        for loop in face.loops:
+                            col = loop[color_layer]
+                            
+                            idu = round(col[1],3)
+                            idv = round(col[2],3)
+                            loop_uv = loop[uv_layer]
+                            loop_uv.uv = [idu, idv]
+                        i+=1
+                    bmesh.update_edit_mesh(me)
+
+        bpy.ops.object.mode_set(mode='OBJECT')           
+
+       
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+class ODYENVDEV_OT_generate_uv_maps(bpy.types.Operator):
+    bl_label = "Convert from main stampmap colors?"
+    bl_idname = "odyenvironmentdev.generate_uv_maps"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        scene =  bpy.context.scene
+        objects = bpy.context.selected_objects
+
+        vertexcolors = scene.OdyEnvDevVertexColorDic
+
+        o_id=0
+        for obj in objects:
+            if obj.mode == 'EDIT':
+                bpy.ops.object.editmode_toggle()
+
+            if obj.type == 'MESH':
+                mesh = obj.data
+                
+                uvs = len(mesh.uv_layers)
+
+                for i in range(5-uvs):
+                    if i >= 0:
+                        mesh.uv_layers.new()
+                
+                mesh.uv_layers[0].name = 'Main'
+                mesh.uv_layers[1].name = 'Lightmap'
+                mesh.uv_layers[2].name = 'Surface'
+                mesh.uv_layers[3].name = 'ES'
+                mesh.uv_layers[4].name = 'Pivot'
+
+            o_id += 1
+
+        return {'FINISHED'}
+    
+class ODYENVDEV_OT_set_uv_es(bpy.types.Operator):
+    bl_label = "Mark UV ES"
+    bl_idname = "odyenvironmentdev.set_uv_es"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    flow : bpy.props.StringProperty(default='0.25;r')
+    
+    def execute(self, context):
+
+        scene = context.scene
+        odyenvdev = scene.odyenvdev
+
+        print("Flow = "+ self.flow)
+        MarkUVES(self.flow)
+        return {'FINISHED'}
+        
+def MarkUVES(flow):
+    D =  bpy.data
+    C =  bpy.context
+    S =  bpy.context.scene
+
+    f = flow.split(';')
+
+    value = float(f[0])
+    channel = f[1]
+
+    print(value)
+    print(channel)
+
+    objects = bpy.context.selected_objects
+    o_id=0
+    for obj in objects:
+        if obj.type == "MESH":
+            me = obj.data
+            bm = bmesh.from_edit_mesh(me)
+
+            if "ES" in me.uv_layers:
+                me.uv_layers['ES'].active=True
+                uv_layer = bm.loops.layers.uv.verify()
+
+                for face in bm.faces:
+                    for loop in face.loops:
+                        if face.select:
+                            loop_uv = loop[uv_layer]
+                            uv_coord = loop_uv.uv
+                            if channel == 'u':
+                                loop_uv.uv = [value, loop_uv.uv[1]]
+                            
+                            if channel == 'v':                                
+                                loop_uv.uv = [loop_uv.uv[0], value]
+
+                bmesh.update_edit_mesh(me)
+    
 class ODYLOOKDEV_OT_export_main(bpy.types.Operator):
     bl_idname = "odylookdev.export_main"
     bl_label = "Export Main"

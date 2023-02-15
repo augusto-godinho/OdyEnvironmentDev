@@ -33,7 +33,7 @@ bl_info = {
     "author" : "Odyssey Interactive",
     "description" : "",
     "blender" : (3, 4, 0),
-    "version" : (0, 0, 1),
+    "version" : (0, 0, 4),
     "location" : "View3D",
     "warning" : "",
     "category" : "Pipeline"
@@ -45,26 +45,22 @@ def register():
 def unregister():
     ...
 
-def node_search_path(context):
-    preferences = context.preferences
-    addon_prefs = preferences.addons["OdyEnvDev"].preferences
-    dirpath = addon_prefs.search_path
-    return dirpath
 
 
-class NodeTemplatePrefs(AddonPreferences):
+class EnvNodeTemplatePrefs(AddonPreferences):
     bl_idname = __name__
 
-    search_path: StringProperty(
-        name="Base Files",
+    env_search_path: StringProperty(
+        name="Base Env Files",
         subtype='DIR_PATH',
-        default="O:\Odyssey\OmegaPerforce\RawContent\Prometheus\Maps\BaseFiles",
+        default="O:\Odyssey\OmegaPerforce\RawContent\Prometheus\Maps\EnvironmentArt\BaseFiles",
 
     )
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "search_path")
+        layout.label(text="Environment")
+        layout.prop(self, "env_search_path")
 
 
 modules = [
@@ -75,7 +71,25 @@ modules = [
 ]
 
 classes = [
-    viewUI.ODYENVDEV_PT_view_panel_settings
+    viewUI.ODYENVDEV_PT_view_panel_settings,
+    viewUI.ODYENVDEV_PT_view_panel_main_stampmapvertex,
+    viewUI.ODYENVDEV_PT_view_panel_emissive_stampmapvertex,
+    viewUI.ODYENVDEV_PT_view_panel_patterns_stampmapvertex,
+    viewUI.ODYENVDEV_PT_view_panel_surface_stampmapvertex,
+    viewUI.ODYENVDEV_PT_view_panel_foliage_vertex,
+    operators.NODE_OT_env_template_add,
+    operators.NODE_MT_env_template_add,
+    operators.ODYENVDEV_OT_clean_duplicated_nodes,
+    operators.ODYENVDEV_OT_set_vertex_code,
+    operators.ODYENVDEV_OT_assign_vertex_to_color_id,
+    operators.ODYENVDEV_OT_rename_color_id,
+    operators.ODYENVDEV_OT_update_color_ids,
+    operators.ODYENVDEV_OT_add_new_color_id,
+    operators.ODYENVDEV_OT_color_id_from_stampmap_main,
+    operators.ODYENVDEV_OT_generate_uv_maps,
+    operators.ODYENVDEV_OT_set_uv_es,
+    operators.ODYENVDEV_OT_clear_all_color_ids,
+    EnvNodeTemplatePrefs
 ]
 
 
@@ -95,7 +109,7 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     
-    bpy.types.NODE_MT_add.append(operators.add_node_button)
+    bpy.types.NODE_MT_add.append(operators.add_env_node_button)
     
 
 
@@ -110,4 +124,4 @@ def unregister():
         bpy.utils.unregister_class(cls)
 
 
-    bpy.types.NODE_MT_add.remove(operators.add_node_button)
+    bpy.types.NODE_MT_add.remove(operators.add_env_node_button)
