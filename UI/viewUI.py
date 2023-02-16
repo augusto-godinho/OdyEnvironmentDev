@@ -23,6 +23,8 @@ class ODYENVDEV_PT_view_panel_settings(bpy.types.Panel):
         col.prop(obj,'material_type')
 
         col.separator()
+
+        col.prop(odyenvdev,'unlit2lit')
     
         box = col.box()
         boxcol = box.column()

@@ -48,6 +48,7 @@ ody_env_nodes = [
                 'Environment Main Surface',
                 'Environment Decals',
                 'Environment Stamp Map',
+                'Environment Vertex Stamp Map',
                 'Environment Foliage',
                 'Environment Background',
 ]
@@ -56,6 +57,7 @@ ody_nodes_env_all = [
                 'Environment Main Surface',
                 'Environment Decals',
                 'Environment Stamp Map',
+                'Environment Vertex Stamp Map',
                 'Environment Foliage',
                 'Environment Background'
 ]
@@ -807,7 +809,6 @@ def MarkVertex(flow):
                         if mesh.vertices[id].select == True:
                             if channel == 'r':
                                 color_layer.data[i].color = [value, col[1], col[2], col[3]]
-                                print(col[1])
                             
                             if channel == 'g':
                                 color_layer.data[i].color = [col[0], value, col[2], col[3]]
@@ -860,7 +861,6 @@ def MarkFace(flow):
                         if poly.select == True:
                             if channel == 'r':
                                 color_layer.data[i].color = [value, col[1], col[2], col[3]]
-                                print(col[1])
                             
                             if channel == 'g':
                                 color_layer.data[i].color = [col[0], value, col[2], col[3]]
@@ -1095,7 +1095,7 @@ class ODYENVDEV_OT_color_id_from_stampmap_main(bpy.types.Operator):
         objects = bpy.context.selected_objects
 
         vertexcolors = scene.OdyEnvDevVertexColorDic
-        vertexcolors.clear()
+        #vertexcolors.clear()
 
         
         main_dict = {
@@ -1111,7 +1111,8 @@ class ODYENVDEV_OT_color_id_from_stampmap_main(bpy.types.Operator):
         }
 
         for col_id in main_dict.values():
-            vertexcolors.add().name = col_id
+            if col_id not in vertexcolors:
+                vertexcolors.add().name = col_id
 
 
         o_id=0
@@ -1143,8 +1144,21 @@ class ODYENVDEV_OT_color_id_from_stampmap_main(bpy.types.Operator):
                         for idx in poly.loop_indices:
                             id = mesh.loops[i].vertex_index
                             col = color_layer.data[i].color
-                            print('Mesh='+str(len(color_layer.data)))
-                            colid = round(col[0],3)
+                            val = col[0]
+
+                            #fixing the ranges
+                            val = checkRange(val, 0, 0.125)
+                            val = checkRange(val, 0.125, 0.250)
+                            val = checkRange(val, 0.250, 0.375)
+                            val = checkRange(val, 0.375, 0.500)
+                            val = checkRange(val, 0.500, 0.625)
+                            val = checkRange(val, 0.625, 0.750)
+                            val = checkRange(val, 0.750, 0.875)
+                            val = checkRange(val, 0.875, 1.0)
+                            
+                            if val <= 0.02: val = 0.02
+                            colid = round(val,3)
+                            
                             if colid in main_dict:
                                 color_ids.data[i].value = main_dict[colid]
                             i+=1
@@ -1183,8 +1197,6 @@ class ODYENVDEV_OT_color_id_from_stampmap_main(bpy.types.Operator):
                     uv_layer = bm.loops.layers.uv.verify()
                     color_layer = bm.loops.layers.color.verify()
 
-                    print(color_layer)
-
                     i=0
                     for face in bm.faces:
                         for loop in face.loops:
@@ -1204,6 +1216,12 @@ class ODYENVDEV_OT_color_id_from_stampmap_main(bpy.types.Operator):
     
     def invoke(self, context, event):
         return context.window_manager.invoke_confirm(self, event)
+    
+def checkRange(value, min, max):
+    if (value>=min) and (value<=max):
+        return min
+    else:
+        return value
 
 class ODYENVDEV_OT_generate_uv_maps(bpy.types.Operator):
     bl_label = "Convert from main stampmap colors?"

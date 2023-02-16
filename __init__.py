@@ -73,10 +73,6 @@ modules = [
 classes = [
     viewUI.ODYENVDEV_PT_view_panel_settings,
     viewUI.ODYENVDEV_PT_view_panel_main_stampmapvertex,
-    viewUI.ODYENVDEV_PT_view_panel_emissive_stampmapvertex,
-    viewUI.ODYENVDEV_PT_view_panel_patterns_stampmapvertex,
-    viewUI.ODYENVDEV_PT_view_panel_surface_stampmapvertex,
-    viewUI.ODYENVDEV_PT_view_panel_foliage_vertex,
     operators.NODE_OT_env_template_add,
     operators.NODE_MT_env_template_add,
     operators.ODYENVDEV_OT_clean_duplicated_nodes,
