@@ -80,6 +80,7 @@ class ODYENVDEV_PT_view_panel_main_stampmapvertex(bpy.types.Panel):
 def drawStampMapMenu(self, odyenvdev, vertexcolors):
     layout = self.layout
     col = layout.column()
+    col.prop(odyenvdev,'set_vertex_code_face')
 
     col.label(text="Main")
     col.prop(odyenvdev,'set_vertex_code_face')
@@ -101,18 +102,30 @@ def drawStampMapMenu(self, odyenvdev, vertexcolors):
     col.operator("odyenvironmentdev.set_vertex_code", text="Team2").flow = "0.750;g"
     col.operator("odyenvironmentdev.set_vertex_code", text="Accent").flow = "1;g"
 
+    col = layout.column()
+    col.label(text="Surface Type")
+    col.operator("odyenvironmentdev.set_vertex_code", text="Rough").flow = "0.0 ;a"
+    col.operator("odyenvironmentdev.set_vertex_code", text="Plastic").flow = "0.250;a"
+    col.operator("odyenvironmentdev.set_vertex_code", text="Metal").flow = "0.500;a"
+    col.operator("odyenvironmentdev.set_vertex_code", text="Reflective").flow = "0.750;a"
+
     col.separator()
-    col.label(text="Surface")
+    col.label(text="Surface Blend")
     col.operator("odyenvironmentdev.set_vertex_code", text="Surface A").flow = "0.250;b"
     col.operator("odyenvironmentdev.set_vertex_code", text="Surface B").flow = "0.500;b"
     col.operator("odyenvironmentdev.set_vertex_code", text="Surface C").flow = "0.750;b"
     col.operator("odyenvironmentdev.set_vertex_code", text="Surface D").flow = "0.900;b"
+
+    
 
         
 def drawVertexStampMapMenu(self, odyenvdev, vertexcolors):        
     layout = self.layout
     col = layout.column()
     vertex_box = col.box()
+
+    col.prop(odyenvdev,'set_vertex_code_face')
+
     vertex_box.label(text="Dictionary:")
     for cg in vertexcolors:
         row = vertex_box.row()
@@ -136,14 +149,25 @@ def drawVertexStampMapMenu(self, odyenvdev, vertexcolors):
     col.operator("odyenvironmentdev.set_uv_es", text="Team1").flow = "0.500;u"
     col.operator("odyenvironmentdev.set_uv_es", text="Team2").flow = "0.750;u"
     col.operator("odyenvironmentdev.set_uv_es", text="Accent").flow = "0.9;u"
-    col.operator("odyenvironmentdev.set_uv_es", text="From Main").flow = "1.0;u"
+    col.separator()
+    col.operator("odyenvironmentdev.set_uv_es", text="Self Emit").flow = "1.0;u"
+    col.prop(odyenvdev,'self_emissive_strenght')
+    
+    col = layout.column()
+    col.label(text="Surface Type")
+    col.operator("odyenvironmentdev.set_vertex_code", text="Rough").flow = "0.0 ;a"
+    col.operator("odyenvironmentdev.set_vertex_code", text="Plastic").flow = "0.250;a"
+    col.operator("odyenvironmentdev.set_vertex_code", text="Metal").flow = "0.500;a"
+    col.operator("odyenvironmentdev.set_vertex_code", text="Reflective").flow = "0.750;a"
 
     col.separator()
-    col.label(text="Surface")
+    col.label(text="Surface Blend")
     col.operator("odyenvironmentdev.set_uv_es", text="Surface A").flow = "0.250;v"
     col.operator("odyenvironmentdev.set_uv_es", text="Surface B").flow = "0.500;v"
     col.operator("odyenvironmentdev.set_uv_es", text="Surface C").flow = "0.750;v"
     col.operator("odyenvironmentdev.set_uv_es", text="Surface D").flow = "0.900;v"
+
+    
 
 
 

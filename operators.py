@@ -1287,6 +1287,12 @@ def MarkUVES(flow):
     print(value)
     print(channel)
 
+    strenght = S.odyenvdev.self_emissive_strenght / 10.0
+
+    if(channel == 'u') and (value >= 1.0 ):
+        value = value + strenght
+        print(value)
+
     objects = bpy.context.selected_objects
     o_id=0
     for obj in objects:

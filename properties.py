@@ -22,6 +22,7 @@ class OdyEnvDevProperties(bpy.types.PropertyGroup):
 
     arena_name : bpy.props.StringProperty(name='Arena Name', description='Character name related to this file', default='Arena_Name')
     unlit2lit : bpy.props.IntProperty(name='Unlit to Lit', description='Change the Materials from 0-Unlit to 1-Lit',  default=0, min=0, max=1, step=1, update=update_unlit2lit)
+    self_emissive_strenght : bpy.props.FloatProperty(name='Self Emission', description='Change the Materials from 0-Unlit to 1-Lit',  default=0, min=0, max=10, step=1)
     #character_skin : bpy.props.StringProperty(name='Skin', description='Character skin name related to this file',  default='Skin_Name')
     #character_recolor : bpy.props.StringProperty(name='Recolor', description='Character skin recolor name related to this file',  default='Recolor_Name')
     #character_has_recolor : bpy.props.BoolProperty(name='Recolor', description='Character skin recolor name related to this file',  default=False)
